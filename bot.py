@@ -6,6 +6,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from flask import Flask
 
 TOKEN = "8900336130:AAEKfOOyi9SQSG1P7kahUPJINz065RbdrRM"
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/15CE2G6h4PpFTrJFiG2k8BIHsYUU77688SwjdVjPYCLg/edit?gid=0#gid=0"
@@ -15,6 +16,13 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
+
+# Создаем простой веб-сервер для Render, чтобы он не закрывал приложение
+web_app = Flask(__name__)
+
+@web_app.route('/')
+def home():
+    return "Bot is running!"
 
 def get_google_services():
     creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", SCOPES)
@@ -80,7 +88,18 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Ошибка при обработке: {e}")
 
 if __name__ == '__main__':
-    app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_document))
-    print("Бот запущен...")
-    app.run_polling()
+    import threading
+    
+    # Запускаем телеграм-бота в отдельном потоке
+    def run_bot():
+        app = ApplicationBuilder().token(TOKEN).build()
+        app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_document))
+        print("Бот запущен через polling...")
+        app.run_polling(drop_pending_updates=True)
+
+    t = threading.Thread(target=run_bot)
+    t.start()
+
+    # Запускаем веб-сервер для Render на порту, который он требует
+    port = int(os.environ.get("PORT", 10000))
+    web_app.run(host="0.0.0.0", port=port)
